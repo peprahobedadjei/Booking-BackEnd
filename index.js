@@ -5,23 +5,33 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const db = require('./database');
-const adminRouter = require('./views/admin');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+const uploadDir = path.join('/tmp', 'uploads');
+
+// Ensure the /tmp/uploads directory exists
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// Configure multer to use the /tmp/uploads directory
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({ storage });
 
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Ensure the uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-
-// Serve static files from the uploads directory
-app.use('/uploads', express.static(uploadsDir));
+// Serve static files from the /tmp/uploads directory
+app.use('/uploads', express.static(uploadDir));
 
 app.post('/submit', upload.single('transactionScreenshot'), (req, res) => {
   const { ticketNumber, ticketType, amount, total } = req.body;
@@ -62,7 +72,7 @@ app.post('/submit', upload.single('transactionScreenshot'), (req, res) => {
   res.send('Ticket data stored successfully!');
 });
 
-app.use('/admin', adminRouter);
+app.use('/admin', require('./views/admin'));
 
 app.get('/admin/data', (req, res) => {
   db.all("SELECT * FROM tickets", [], (err, rows) => {
